@@ -71,7 +71,7 @@ check dir-arg        2 "not a readable file"        -       -- "$t"             
 # fail closed when grep itself errors mid-scan: a fake grep on PATH that exits 2
 mkdir -p "$t/bin"; printf '#!/usr/bin/env bash\nexit 2\n' > "$t/bin/grep"; chmod +x "$t/bin/grep"
 ge=$(PATH="$t/bin:$PATH" bash "$scan" "$t/c1" 2>&1); got=$?
-case "$got:$ge" in "2:"*"could not scan"*) echo "ok   grep-error-fails-closed";; *) echo "FAIL grep-error-fails-closed (exit $got): $ge"; fail=1;; esac
+case "$got:$ge" in "2:"*"could not scan"*"grep failed (exit 2)"*) echo "ok   grep-error-fails-closed";; *) echo "FAIL grep-error-fails-closed (exit $got): $ge"; fail=1;; esac
 # file names with control characters are printed without them (skipped where such names can't be created)
 nl_name="$t/$(printf 'bad\nscan-secrets: clean')"
 if printf 'token: ghp_%s\n' "$k" > "$nl_name" 2>/dev/null; then
@@ -101,7 +101,7 @@ case "$got:$xo" in *"$k"*) echo "FAIL xtrace-no-leak (secret in trace)"; fail=1;
 # a failure later in the pipe (cut/tr) must fail closed too: fake cut on PATH that exits 1
 mkdir -p "$t/bin2"; printf '#!/usr/bin/env bash\nexit 1\n' > "$t/bin2/cut"; chmod +x "$t/bin2/cut"
 po=$(PATH="$t/bin2:$PATH" bash "$scan" "$t/d1" 2>&1); got=$?
-case "$got:$po" in "2:"*"could not scan"*) echo "ok   pipe-error-fails-closed";; *) echo "FAIL pipe-error-fails-closed (exit $got): $po"; fail=1;; esac
+case "$got:$po" in "2:"*"could not scan"*"cut/tr failed"*) echo "ok   pipe-error-fails-closed";; *) echo "FAIL pipe-error-fails-closed (exit $got): $po"; fail=1;; esac
 # Turkish locale must not break case-insensitive matching (skipped if the locale isn't installed)
 printf 'API_KEY = "%s"\n' "$k" > "$t/tr1"
 if locale -a 2>/dev/null | grep -qi '^tr_TR'; then

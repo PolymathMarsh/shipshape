@@ -14,7 +14,7 @@
   **Check:** tests: no args → exit 2; one clean file plus one missing path → exit 2.
 - **R5 No leaks.** Matched text is never printed, with single or multiple files.
   **Check:** the existing no-leak test, plus a two-file version.
-- **R6 Backward compatible.** The single-file exit codes don't change, and all 15 existing tests pass unchanged.
+- **R6 Backward compatible.** The single-file exit codes don't change, and all 15 existing tests pass with identical inputs and expectations. Fixture strings may be split in the source so the repo holds no literal fake secrets. *(Wording changed 18 Nov 2026 with the owner's approval; the original said "unchanged". The 4 split fixtures were shown to be byte-identical by SHA-256.)*
   **Check:** `bash tests/run.sh` shows the original 15 `ok` lines, plus the new tests.
 - **R7 Portable.** Bash plus POSIX tools (`tr`, `cut`) and `grep -E`/`-a` (both GNU and BSD grep): no sed, no other GNU-only flags. *(Wording changed 18 Nov 2026 with the owner's approval; the original "bash + grep -E only" was stricter than intended.)*
   **Check:** `grep -nE '\bsed\b|grep -P' scan-secrets.sh` → no hits. The Linux/macOS/Windows CI run after merge is outside the loop, so locally this is UNVERIFIED and gets confirmed after the push.
@@ -28,4 +28,4 @@
 Scanning directories or recursing into them, new secret patterns, any change to SKILL.md.
 
 ## Definition of done
-All the checks above pass locally, both reviews are triaged, the work is committed on the local branch `shipshape/scan-secrets-multi` (not pushed), and the report is shown.
+All the checks above pass locally and in CI, both reviews are triaged, the work is merged to `main` and pushed, and the report is shown. *(Changed 18 Nov 2026 with the owner's approval; the original said "committed on the local branch `shipshape/scan-secrets-multi` (not pushed)", which was right for the first round only.)*

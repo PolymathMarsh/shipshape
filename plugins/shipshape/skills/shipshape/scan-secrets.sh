@@ -50,7 +50,8 @@ for f in "$@"; do
     rc=$?
     # 0 = match, 1 = no match, anything else = error. Fail closed on errors.
     if [ "$rc" -gt 1 ]; then
-      say "scan-secrets: could not scan $(show "$f") (exit $rc) - do not send." >&2
+      if [ "$rc" -eq 9 ]; then why="cut/tr failed"; else why="grep failed (exit $rc)"; fi
+      say "scan-secrets: could not scan $(show "$f"): $why - do not send." >&2
       exit 2
     fi
     if [ "$rc" -eq 0 ]; then

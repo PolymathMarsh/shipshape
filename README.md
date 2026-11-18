@@ -72,5 +72,7 @@ bash tests/run.sh      # secrets-scanner tests
 ```
 CI runs the tests and [gitleaks](https://github.com/gitleaks/gitleaks) on every push.
 
+**Writing scanner tests:** never put a fake secret in the source as one literal string. Split it so it's only assembled at runtime, e.g. `"Pass""word=..."` or `"sk-$k"`. The `repo-self-clean` test runs the scanner over the repo's own test file and fails if any literal is left, because a literal would make the secrets gate block every review of Shipshape itself.
+
 ## Licence
 MIT
