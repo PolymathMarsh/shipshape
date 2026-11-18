@@ -7,7 +7,7 @@
       "name": "shipshape",
       "source": "./plugins/shipshape",
       "description": "Spec, tests first, build, verify, and a review by another model (Gemini, Codex, Copilot, Ollama) or a fresh Claude agent. Modes: full, quick, redline.",
-      "version": "0.1.0"
+      "version": "0.2.0"
     }
   ]
 }
