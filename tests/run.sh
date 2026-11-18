@@ -16,7 +16,7 @@ expect 0 prose      'The password field must be at least 8 characters.\n'
 expect 1 openai     "const key = \"sk-$k\";\n"
 expect 1 aws        "id = AKIA$(printf 'ABCDEFGHIJKLMNOP')\n"
 expect 1 github     "token: ghp_$k\n"
-expect 1 privkey    "-----BEGIN RSA PRIVATE KEY-----\nMIIE\n"
+expect 1 privkey    "-----BEGIN RSA PRIV""ATE KEY-----\nMIIE\n"   # split so the repo holds no literal key header
 expect 1 assignment "password = \"hunter2hunter2\"\n"
 expect 1 connstr    "Server=db;Database=x;User Id=sa;Password=p4ssw0rd;\n"
 expect 0 empty      ''
