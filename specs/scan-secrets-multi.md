@@ -16,7 +16,7 @@
   **Check:** the existing no-leak test, plus a two-file version.
 - **R6 Backward compatible.** The single-file exit codes don't change, and all 15 existing tests pass unchanged.
   **Check:** `bash tests/run.sh` shows the original 15 `ok` lines, plus the new tests.
-- **R7 Portable.** Bash plus `grep -E` only: no sed, no GNU-only flags.
+- **R7 Portable.** Bash plus POSIX tools (`tr`, `cut`) and `grep -E`/`-a` (both GNU and BSD grep): no sed, no other GNU-only flags. *(Wording changed 18 Nov 2026 with the owner's approval; the original "bash + grep -E only" was stricter than intended.)*
   **Check:** `grep -nE '\bsed\b|grep -P' scan-secrets.sh` → no hits. The Linux/macOS/Windows CI run after merge is outside the loop, so locally this is UNVERIFIED and gets confirmed after the push.
 
 ## Edge cases

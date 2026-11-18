@@ -15,6 +15,12 @@ Asking a model to "review your own work and loop until it's right" mostly gets t
 2. **Someone else grades it.** The review runs on another model family when one is available (Gemini, OpenAI Codex, GitHub Copilot, a local Ollama model). A PASS needs quoted evidence.
 3. **It stops.** 3 rounds at most, a checkpoint before each round, and no declaring a pass just to end the loop.
 
+## Requirements
+- **Claude Code** (CLI, desktop app or IDE extension). Nothing else to install: the plugin is one skill plus a bash script.
+- **bash, grep, cut, tr.** These are standard on macOS and Linux. On Windows, Claude Code already uses Git Bash, which includes them. CI tests the scanner on all three.
+- **git** is recommended for checkpoints. Without it, Shipshape keeps dated copies instead.
+- **For a cross-model review:** at least one of the reviewer CLIs below, installed and signed in. Without one, the review runs on a fresh Claude agent and the report says so.
+
 ## Install
 In Claude Code:
 ```

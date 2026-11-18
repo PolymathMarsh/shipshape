@@ -4,15 +4,17 @@
 # Prints only file names, line numbers and the kind of match, never the matched text.
 # Exit 0 = all clean, 1 = possible secret found,
 #      2 = usage error (nothing scanned) or scan error (stopped; do not send).
-# Portable: bash + grep -E only (GNU or BSD).
+# Portable: bash + POSIX tools (tr, cut) + grep -E/-a (GNU or BSD).
 { set +x; } 2>/dev/null   # never trace: traces could show matched text
 set -u
-[ "$#" -gt 0 ] || { echo "usage: scan-secrets.sh <file> [file...]" >&2; exit 2; }
+export LC_ALL=C           # byte-wise, locale-independent matching (e.g. Turkish i/I case folding)
+say() { printf '%s\n' "$*"; }   # printf, not echo: no backslash interpretation in file names
+[ "$#" -gt 0 ] || { say "usage: scan-secrets.sh <file> [file...]" >&2; exit 2; }
 # Display form of a file name: control characters (newlines etc.) removed so a name can't fake a line.
 show() { printf '%s' "$1" | tr -d '\000-\037\177'; }
 # Fail closed: check every argument before scanning any of them.
 for f in "$@"; do
-  { [ -f "$f" ] && [ -r "$f" ]; } || { echo "scan-secrets: not a readable file: $(show "$f")" >&2; exit 2; }
+  { [ -f "$f" ] && [ -r "$f" ]; } || { say "scan-secrets: not a readable file: $(show "$f")" >&2; exit 2; }
 done
 
 # name|pattern   (all matched case-insensitively)
@@ -40,16 +42,20 @@ for f in "$@"; do
     [ -z "$name" ] && continue
     # Matched text goes straight from grep to cut; only line numbers are kept.
     # -a reads binary files as text, so they are scanned and line numbers stay numbers.
-    lines=$(grep -naEi -- "$pat" "$f" 2>/dev/null | cut -d: -f1 | tr '\n' ' '; exit "${PIPESTATUS[0]}")
+    # The subshell exits with grep's status, or 9 if cut or tr failed.
+    lines=$(grep -naEi -- "$pat" "$f" 2>/dev/null | cut -d: -f1 | tr '\n' ' '
+            p=("${PIPESTATUS[@]}")
+            { [ "${p[1]}" -eq 0 ] && [ "${p[2]}" -eq 0 ]; } || exit 9
+            exit "${p[0]}")
     rc=$?
-    # grep: 0 = match, 1 = no match, anything else = error. Fail closed on errors.
+    # 0 = match, 1 = no match, anything else = error. Fail closed on errors.
     if [ "$rc" -gt 1 ]; then
-      echo "scan-secrets: could not scan $(show "$f") (grep exit $rc) - do not send." >&2
+      say "scan-secrets: could not scan $(show "$f") (exit $rc) - do not send." >&2
       exit 2
     fi
     if [ "$rc" -eq 0 ]; then
       hit=1
-      echo "$(show "$f"): possible $name on line(s): $lines"
+      say "$(show "$f"): possible $name on line(s): $lines"
     fi
   done <<EOF
 $rules
@@ -58,8 +64,8 @@ EOF
 done
 
 if [ "$dirty" -gt 0 ]; then
-  echo "scan-secrets: POSSIBLE SECRETS FOUND in $dirty of $total files - do not send." >&2
+  say "scan-secrets: POSSIBLE SECRETS FOUND in $dirty of $total files - do not send." >&2
   exit 1
 fi
-echo "scan-secrets: clean ($total files)"
+say "scan-secrets: clean ($total files)"
 exit 0

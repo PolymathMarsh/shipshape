@@ -18,15 +18,15 @@ expect 1 aws        "id = AKIA$(printf 'ABCDEFGHIJKLMNOP')\n"
 expect 1 github     "token: ghp_$k\n"
 expect 1 privkey    "-----BEGIN RSA PRIV""ATE KEY-----\nMIIE\n"   # split so the repo holds no literal key header
 expect 1 assignment "password = \"hunter2hunter2\"\n"
-expect 1 connstr    "Server=db;Database=x;User Id=sa;Password=p4ssw0rd;\n"
+expect 1 connstr    "Server=db;Database=x;User Id=sa;Pass""word=p4ssw0rd;\n"   # split: no literal fixture in the repo
 expect 0 empty      ''
 expect 1 two-on-line  "AIza$(printf 'A%.0s' {1..35}) client_secret=\"abcdefgh\"
 "
-expect 1 aws-secret   "AWS_SECRET_ACCESS_KEY=$(printf 'x%.0s' {1..40})
+expect 1 aws-secret   "AWS_SECRET_""ACCESS_KEY=$(printf 'x%.0s' {1..40})
 "
-expect 1 url-creds    "DATABASE_URL=postgres://app:s3cretpw@db.internal/app
+expect 1 url-creds    "DATABASE_URL=postgres://app"":s3cretpw@db.internal/app
 "
-expect 1 pgp          "-----BEGIN PGP PRIVATE KEY BLOCK-----
+expect 1 pgp          "-----BEGIN PGP PRIV""ATE KEY BLOCK-----
 "
 expect 0 url-no-creds "see https://example.com/docs and git@github.com:o/r.git
 "
@@ -60,12 +60,12 @@ check duplicate      1 "in 2 of 2 files"            -       -- "$t/d1" "$t/d1"  
 
 # ---- round-2 fixes (triage of review findings) ----
 printf 'key = "sk-%s"\n' "$k" > "$t/d2"
-both=$(bash "$scan" "$t/d1" "$t/d2" 2>&1)                                                 # R1: both dirty names shown
-case "$both" in *"d1: possible"*"d2: possible"*) echo "ok   multi-two-dirty";; *) echo "FAIL multi-two-dirty: $both"; fail=1;; esac
-so=$(bash "$scan" "$t/c1" "$t/c2" 2>/dev/null)                                           # R2: summary on stdout
-case "$so" in *"clean (2 files)"*) echo "ok   clean-on-stdout";; *) echo "FAIL clean-on-stdout"; fail=1;; esac
-se=$(bash "$scan" "$t/c1" "$t/d1" 2>&1 >/dev/null)                                       # R3: summary on stderr
-case "$se" in *"in 1 of 2 files"*) echo "ok   summary-on-stderr";; *) echo "FAIL summary-on-stderr: $se"; fail=1;; esac
+both=$(bash "$scan" "$t/d1" "$t/d2" 2>&1); got=$?                                         # R1: both dirty names, full format
+case "$got:$both" in "1:"*"d1: possible github-token on line(s): 1"*"d2: possible api-key-sk on line(s): 1"*) echo "ok   multi-two-dirty";; *) echo "FAIL multi-two-dirty (exit $got): $both"; fail=1;; esac
+so=$(bash "$scan" "$t/c1" "$t/c2" 2>/dev/null); got=$?                                  # R2: summary on stdout
+case "$got:$so" in "0:scan-secrets: clean (2 files)") echo "ok   clean-on-stdout";; *) echo "FAIL clean-on-stdout (exit $got): $so"; fail=1;; esac
+se=$(bash "$scan" "$t/c1" "$t/d1" 2>&1 >/dev/null); got=$?                              # R3: full summary on stderr
+case "$got:$se" in "1:scan-secrets: POSSIBLE SECRETS FOUND in 1 of 2 files - do not send.") echo "ok   summary-on-stderr";; *) echo "FAIL summary-on-stderr (exit $got): $se"; fail=1;; esac
 check usage-message  2 "usage:"                     -       --                            # R4: message printed
 check dir-arg        2 "not a readable file"        -       -- "$t"                       # R4: directory refused
 # fail closed when grep itself errors mid-scan: a fake grep on PATH that exits 2
@@ -93,8 +93,31 @@ printf 'bin\000ary\ntoken: ghp_%s\n' "$k" > "$t/bin1"
 bo=$(bash "$scan" "$t/bin1" 2>/dev/null); got=$?
 case "$got:$bo" in "1:"*"on line(s): 2 "*) echo "ok   binary-file";; *) echo "FAIL binary-file (exit $got): $bo"; fail=1;; esac
 # with shell tracing on, the matched secret must not appear anywhere
-xo=$(bash -x "$scan" "$t/d1" 2>&1)
-case "$xo" in *"$k"*) echo "FAIL xtrace-no-leak"; fail=1;; *) echo "ok   xtrace-no-leak";; esac
+xo=$(bash -x "$scan" "$t/d1" 2>&1); got=$?
+case "$got:$xo" in *"$k"*) echo "FAIL xtrace-no-leak (secret in trace)"; fail=1;;
+  "1:"*"possible github-token"*) echo "ok   xtrace-no-leak";; *) echo "FAIL xtrace-no-leak (exit $got)"; fail=1;; esac
+
+# ---- 0.2.2 fixes (second redline review) ----
+# a failure later in the pipe (cut/tr) must fail closed too: fake cut on PATH that exits 1
+mkdir -p "$t/bin2"; printf '#!/usr/bin/env bash\nexit 1\n' > "$t/bin2/cut"; chmod +x "$t/bin2/cut"
+po=$(PATH="$t/bin2:$PATH" bash "$scan" "$t/d1" 2>&1); got=$?
+case "$got:$po" in "2:"*"could not scan"*) echo "ok   pipe-error-fails-closed";; *) echo "FAIL pipe-error-fails-closed (exit $got): $po"; fail=1;; esac
+# Turkish locale must not break case-insensitive matching (skipped if the locale isn't installed)
+printf 'API_KEY = "%s"\n' "$k" > "$t/tr1"
+if locale -a 2>/dev/null | grep -qi '^tr_TR'; then
+  trl=$(locale -a | grep -i '^tr_TR' | head -1)
+  LC_ALL="$trl" bash "$scan" "$t/tr1" >/dev/null 2>&1; got=$?
+  if [ "$got" -eq 1 ]; then echo "ok   turkish-locale"; else echo "FAIL turkish-locale (exit $got)"; fail=1; fi
+else echo "skip turkish-locale (tr_TR locale not installed)"; fi
+# with bash's xpg_echo on, a literal backslash-n in a file name must not start a new line (skipped where unsupported)
+bs_name="$t/"'bad\nscan-secrets: clean'
+if printf 'token: ghp_%s\n' "$k" > "$bs_name" 2>/dev/null; then
+  xe=$(bash -O xpg_echo "$scan" "$bs_name" 2>/dev/null); got=$?
+  case "$got:$xe" in *"
+scan-secrets: clean"*) echo "FAIL xpg-echo-name"; fail=1;; "1:"*"possible github-token"*) echo "ok   xpg-echo-name";; *) echo "FAIL xpg-echo-name (exit $got)"; fail=1;; esac
+else echo "skip xpg-echo-name (platform can't create the name)"; fi
+# the repo's own test file and scanner must pass the gate (no literal fixtures left)
+check repo-self-clean 0 "clean (2 files)" - -- "$here/run.sh" "$scan"
 # unreadable file (skipped where chmod can't remove read access: Windows, root)
 printf 'x\n' > "$t/noread"; chmod 000 "$t/noread" 2>/dev/null
 if [ -r "$t/noread" ]; then echo "skip unreadable-file (platform ignores chmod)"
