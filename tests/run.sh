@@ -70,13 +70,31 @@ check usage-message  2 "usage:"                     -       --                  
 check dir-arg        2 "not a readable file"        -       -- "$t"                       # R4: directory refused
 # fail closed when grep itself errors mid-scan: a fake grep on PATH that exits 2
 mkdir -p "$t/bin"; printf '#!/usr/bin/env bash\nexit 2\n' > "$t/bin/grep"; chmod +x "$t/bin/grep"
-PATH="$t/bin:$PATH" bash "$scan" "$t/c1" >/dev/null 2>&1; got=$?
-if [ "$got" -eq 2 ]; then echo "ok   grep-error-fails-closed"; else echo "FAIL grep-error-fails-closed (exit $got)"; fail=1; fi
-# file names with control characters are printed without them
-nl_name="$t/$(printf 'bad\nscan-secrets: clean')"; printf 'token: ghp_%s\n' "$k" > "$nl_name"
-out=$(bash "$scan" "$nl_name" 2>/dev/null)
-case "$out" in *"
-scan-secrets: clean"*) echo "FAIL control-chars-in-name"; fail=1;; *) echo "ok   control-chars-in-name";; esac
+ge=$(PATH="$t/bin:$PATH" bash "$scan" "$t/c1" 2>&1); got=$?
+case "$got:$ge" in "2:"*"could not scan"*) echo "ok   grep-error-fails-closed";; *) echo "FAIL grep-error-fails-closed (exit $got): $ge"; fail=1;; esac
+# file names with control characters are printed without them (skipped where such names can't be created)
+nl_name="$t/$(printf 'bad\nscan-secrets: clean')"
+if printf 'token: ghp_%s\n' "$k" > "$nl_name" 2>/dev/null; then
+  out=$(bash "$scan" "$nl_name" 2>/dev/null); got=$?
+  case "$got:$out" in "1:"*"
+scan-secrets: clean"*) echo "FAIL control-chars-in-name"; fail=1;;
+    "1:"*"possible github-token"*) echo "ok   control-chars-in-name";;
+    *) echo "FAIL control-chars-in-name (exit $got)"; fail=1;; esac
+else echo "skip control-chars-in-name (platform can't create the name)"; fi
+
+# ---- 0.2.1 fixes (redline review) ----
+printf 'token: ghp_%s\n' "$k" > "$t/my dirty.txt"
+check spaces-dirty   1 "my dirty.txt: possible"     -       -- "$t/my dirty.txt"          # R1 + spaces
+check missing-with-clean 2 "not a readable file"    "clean" -- "$t/c1" "$t/missing"       # R4, exact spec case
+: > "$t/e1"; : > "$t/e2"
+check multi-empty    0 "clean (2 files)"            -       -- "$t/e1" "$t/e2"            # edge: empty files
+# binary file (NUL byte) with a secret: still flagged, line numbers stay numbers
+printf 'bin\000ary\ntoken: ghp_%s\n' "$k" > "$t/bin1"
+bo=$(bash "$scan" "$t/bin1" 2>/dev/null); got=$?
+case "$got:$bo" in "1:"*"on line(s): 2 "*) echo "ok   binary-file";; *) echo "FAIL binary-file (exit $got): $bo"; fail=1;; esac
+# with shell tracing on, the matched secret must not appear anywhere
+xo=$(bash -x "$scan" "$t/d1" 2>&1)
+case "$xo" in *"$k"*) echo "FAIL xtrace-no-leak"; fail=1;; *) echo "ok   xtrace-no-leak";; esac
 # unreadable file (skipped where chmod can't remove read access: Windows, root)
 printf 'x\n' > "$t/noread"; chmod 000 "$t/noread" 2>/dev/null
 if [ -r "$t/noread" ]; then echo "skip unreadable-file (platform ignores chmod)"

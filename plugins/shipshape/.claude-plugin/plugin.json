@@ -1,7 +1,7 @@
 {
   "name": "shipshape",
   "description": "Spec-driven build loop with real checks and a cross-model review. Modes: full, quick, redline.",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": { "name": "PolymathMarsh" },
   "license": "MIT",
   "repository": "https://github.com/PolymathMarsh/shipshape"

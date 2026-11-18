@@ -2,8 +2,10 @@
 # scan-secrets.sh <file> [file...]
 # Blocks review prompts that look like they contain secrets.
 # Prints only file names, line numbers and the kind of match, never the matched text.
-# Exit 0 = all clean, 1 = possible secret found, 2 = usage error (nothing is scanned).
+# Exit 0 = all clean, 1 = possible secret found,
+#      2 = usage error (nothing scanned) or scan error (stopped; do not send).
 # Portable: bash + grep -E only (GNU or BSD).
+{ set +x; } 2>/dev/null   # never trace: traces could show matched text
 set -u
 [ "$#" -gt 0 ] || { echo "usage: scan-secrets.sh <file> [file...]" >&2; exit 2; }
 # Display form of a file name: control characters (newlines etc.) removed so a name can't fake a line.
@@ -36,7 +38,10 @@ for f in "$@"; do
   hit=0
   while IFS='|' read -r name pat; do
     [ -z "$name" ] && continue
-    found=$(grep -nEi -- "$pat" "$f" 2>/dev/null); rc=$?
+    # Matched text goes straight from grep to cut; only line numbers are kept.
+    # -a reads binary files as text, so they are scanned and line numbers stay numbers.
+    lines=$(grep -naEi -- "$pat" "$f" 2>/dev/null | cut -d: -f1 | tr '\n' ' '; exit "${PIPESTATUS[0]}")
+    rc=$?
     # grep: 0 = match, 1 = no match, anything else = error. Fail closed on errors.
     if [ "$rc" -gt 1 ]; then
       echo "scan-secrets: could not scan $(show "$f") (grep exit $rc) - do not send." >&2
@@ -44,7 +49,6 @@ for f in "$@"; do
     fi
     if [ "$rc" -eq 0 ]; then
       hit=1
-      lines=$(printf '%s\n' "$found" | cut -d: -f1 | tr '\n' ' ')
       echo "$(show "$f"): possible $name on line(s): $lines"
     fi
   done <<EOF
