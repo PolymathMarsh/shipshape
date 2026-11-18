@@ -3,12 +3,14 @@
 # Blocks review prompts that look like they contain secrets.
 # Prints only file names, line numbers and the kind of match, never the matched text.
 # Exit 0 = all clean, 1 = possible secret found, 2 = usage error (nothing is scanned).
-# Portable: bash + grep -E (GNU or BSD). No sed.
+# Portable: bash + grep -E only (GNU or BSD).
 set -u
 [ "$#" -gt 0 ] || { echo "usage: scan-secrets.sh <file> [file...]" >&2; exit 2; }
+# Display form of a file name: control characters (newlines etc.) removed so a name can't fake a line.
+show() { printf '%s' "$1" | tr -d '\000-\037\177'; }
 # Fail closed: check every argument before scanning any of them.
 for f in "$@"; do
-  { [ -f "$f" ] && [ -r "$f" ]; } || { echo "scan-secrets: not a readable file: $f" >&2; exit 2; }
+  { [ -f "$f" ] && [ -r "$f" ]; } || { echo "scan-secrets: not a readable file: $(show "$f")" >&2; exit 2; }
 done
 
 # name|pattern   (all matched case-insensitively)
@@ -34,10 +36,16 @@ for f in "$@"; do
   hit=0
   while IFS='|' read -r name pat; do
     [ -z "$name" ] && continue
-    lines=$(grep -nEi -- "$pat" "$f" 2>/dev/null | cut -d: -f1 | tr '\n' ' ') || true
-    if [ -n "$lines" ]; then
+    found=$(grep -nEi -- "$pat" "$f" 2>/dev/null); rc=$?
+    # grep: 0 = match, 1 = no match, anything else = error. Fail closed on errors.
+    if [ "$rc" -gt 1 ]; then
+      echo "scan-secrets: could not scan $(show "$f") (grep exit $rc) - do not send." >&2
+      exit 2
+    fi
+    if [ "$rc" -eq 0 ]; then
       hit=1
-      echo "$f: possible $name on line(s): $lines"
+      lines=$(printf '%s\n' "$found" | cut -d: -f1 | tr '\n' ' ')
+      echo "$(show "$f"): possible $name on line(s): $lines"
     fi
   done <<EOF
 $rules

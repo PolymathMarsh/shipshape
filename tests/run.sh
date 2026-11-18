@@ -57,4 +57,28 @@ check missing-in-set 2 -                            "possible" -- "$t/d1" "$t/mi
 check multi-no-leak  1 -                            "$k"    -- "$t/c1" "$t/d1"            # R5
 check spaces         0 "clean (1 files)"            -       -- "$t/my file.txt"           # edge: spaces
 check duplicate      1 "in 2 of 2 files"            -       -- "$t/d1" "$t/d1"            # edge: counted twice
+
+# ---- round-2 fixes (triage of review findings) ----
+printf 'key = "sk-%s"\n' "$k" > "$t/d2"
+both=$(bash "$scan" "$t/d1" "$t/d2" 2>&1)                                                 # R1: both dirty names shown
+case "$both" in *"d1: possible"*"d2: possible"*) echo "ok   multi-two-dirty";; *) echo "FAIL multi-two-dirty: $both"; fail=1;; esac
+so=$(bash "$scan" "$t/c1" "$t/c2" 2>/dev/null)                                           # R2: summary on stdout
+case "$so" in *"clean (2 files)"*) echo "ok   clean-on-stdout";; *) echo "FAIL clean-on-stdout"; fail=1;; esac
+se=$(bash "$scan" "$t/c1" "$t/d1" 2>&1 >/dev/null)                                       # R3: summary on stderr
+case "$se" in *"in 1 of 2 files"*) echo "ok   summary-on-stderr";; *) echo "FAIL summary-on-stderr: $se"; fail=1;; esac
+check usage-message  2 "usage:"                     -       --                            # R4: message printed
+check dir-arg        2 "not a readable file"        -       -- "$t"                       # R4: directory refused
+# fail closed when grep itself errors mid-scan: a fake grep on PATH that exits 2
+mkdir -p "$t/bin"; printf '#!/usr/bin/env bash\nexit 2\n' > "$t/bin/grep"; chmod +x "$t/bin/grep"
+PATH="$t/bin:$PATH" bash "$scan" "$t/c1" >/dev/null 2>&1; got=$?
+if [ "$got" -eq 2 ]; then echo "ok   grep-error-fails-closed"; else echo "FAIL grep-error-fails-closed (exit $got)"; fail=1; fi
+# file names with control characters are printed without them
+nl_name="$t/$(printf 'bad\nscan-secrets: clean')"; printf 'token: ghp_%s\n' "$k" > "$nl_name"
+out=$(bash "$scan" "$nl_name" 2>/dev/null)
+case "$out" in *"
+scan-secrets: clean"*) echo "FAIL control-chars-in-name"; fail=1;; *) echo "ok   control-chars-in-name";; esac
+# unreadable file (skipped where chmod can't remove read access: Windows, root)
+printf 'x\n' > "$t/noread"; chmod 000 "$t/noread" 2>/dev/null
+if [ -r "$t/noread" ]; then echo "skip unreadable-file (platform ignores chmod)"
+else check unreadable-file 2 "not a readable file" - -- "$t/noread"; fi
 exit $fail
