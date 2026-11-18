@@ -111,18 +111,21 @@ if locale -a 2>/dev/null | grep -qi '^tr_TR'; then
 else echo "skip turkish-locale (tr_TR locale not installed)"; fi
 # with bash's xpg_echo on, a literal backslash-n in a file name must not start a new line (skipped where unsupported)
 bs_name="$t/"'bad\nscan-secrets: clean'
-if printf 'token: ghp_%s\n' "$k" > "$bs_name" 2>/dev/null; then
+if { printf 'token: ghp_%s\n' "$k" > "$bs_name"; } 2>/dev/null; then
   xe=$(bash -O xpg_echo "$scan" "$bs_name" 2>/dev/null); got=$?
   case "$got:$xe" in *"
 scan-secrets: clean"*) echo "FAIL xpg-echo-name"; fail=1;; "1:"*"possible github-token"*) echo "ok   xpg-echo-name";; *) echo "FAIL xpg-echo-name (exit $got)"; fail=1;; esac
 else echo "skip xpg-echo-name (platform can't create the name)"; fi
 # the repo's own test file and scanner must pass the gate (no literal fixtures left)
-# every file in the repo (tracked files via git when available, else everything outside .git)
+# every file in the repo: tracked and untracked-but-not-ignored via git when available, else
+# everything outside .git. NUL-separated so odd names survive; deleted-but-tracked files are skipped.
 root="$here/.."
+files=()
 if git -C "$root" rev-parse >/dev/null 2>&1; then
-  files=(); while IFS= read -r x; do files+=("$root/$x"); done < <(git -C "$root" ls-files)
+  while IFS= read -r -d '' x; do [ -f "$root/$x" ] && files+=("$root/$x"); done \
+    < <(git -C "$root" ls-files -z --cached --others --exclude-standard)
 else
-  files=(); while IFS= read -r x; do files+=("$x"); done < <(find "$root" -type f -not -path '*/.git/*')
+  while IFS= read -r -d '' x; do files+=("$x"); done < <(find "$root" -type f -not -path '*/.git/*' -print0)
 fi
 check repo-self-clean 0 "scan-secrets: clean (${#files[@]} files)" - -- "${files[@]}"
 
@@ -153,5 +156,6 @@ if printf 'token: ghp_%s\n' "$k" > "$spoof" 2>/dev/null; then
 else echo "skip quoted-name-spoof (platform can't create the name)"; fi
 q="$t/it's.txt"; printf 'token: ghp_%s\n' "$k" > "$q"
 so=$(bash "$scan" "$q" 2>/dev/null); got=$?
-case "$got:$so" in "1:'$t/it'\''s.txt': possible github-token"*) echo "ok   quote-in-name-escaped";; *) echo "FAIL quote-in-name-escaped (exit $got): $so"; fail=1;; esac
+want="'$t/it'\\''s.txt': possible github-token on line(s): 1 "
+if [ "$got" -eq 1 ] && [ "$so" = "$want" ]; then echo "ok   quote-in-name-escaped"; else echo "FAIL quote-in-name-escaped (exit $got): $so"; fail=1; fi
 exit $fail

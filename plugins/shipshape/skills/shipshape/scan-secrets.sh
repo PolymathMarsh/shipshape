@@ -12,8 +12,9 @@ say() { printf '%s\n' "$*"; }   # printf, not echo: no backslash interpretation 
 [ "$#" -gt 0 ] || { say "usage: scan-secrets.sh <file> [file...]" >&2; exit 2; }
 # Display form of a file name: control characters (newlines etc.) removed so a name can't fake a line.
 show() { printf '%s' "$1" | tr -d '\000-\037\177'; }
-# Quoted display form: wrapped in single quotes, any ' inside written as '\'' (shell style),
-# so a name can never pass for part of a finding line.
+# Quoted display form: wrapped in single quotes, any ' inside written as '\'' (shell style).
+# Read as shell quoting, the name can't pass for part of a finding line. A name containing ' can
+# still look like one to a reader skimming for "': possible", so parse the quoting, not the text.
 sq="'"; sq_esc="'\\''"
 qname() { local n; n=$(show "$1"); n=${n//$sq/$sq_esc}; printf "'%s'" "$n"; }
 # Fail closed: check every argument before scanning any of them.

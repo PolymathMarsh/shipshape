@@ -4,7 +4,7 @@
 `scan-secrets.sh` accepts one or more files, scans them all, and ends with one summary line. It still never prints a matched value.
 
 ## Requirements
-- **R1 Multiple files.** `scan-secrets.sh a b c` scans every file. Each finding line names its file in single quotes: `'<file>': possible <kind> on line(s): …`, with any `'` in the name written as `'\''`. *(Quoting added 18 Nov 2026 with the owner's approval, so a crafted file name can't pass for part of a finding. The original format was `<file>: possible …`.)*
+- **R1 Multiple files.** `scan-secrets.sh a b c` scans every file. Each finding line names its file in single quotes: `'<file>': possible <kind> on line(s): …`, with any `'` in the name written as `'\''`. *(Quoting added 18 Nov 2026 with the owner's approval, so a crafted file name can't pass for part of a finding when the line is read as shell quoting; a name containing `'` can still mislead a reader who just looks for `': possible`. The original format was `<file>: possible …`.)*
   **Check:** test: one clean and one dirty file → exit 1, and the output names the dirty file but not the clean one.
 - **R2 Clean summary.** If every file is clean → exit 0 with stdout `scan-secrets: clean (N files)`.
   **Check:** test: 2 clean files → exit 0, and the output contains `clean (2 files)`.
