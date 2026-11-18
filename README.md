@@ -9,7 +9,7 @@ Shipshape is a Claude Code plugin that builds from a spec and keeps going until 
 ```
 
 ## Why
-Asking a model to "review your own work and loop until it's right" mostly gets the model agreeing with itself. shipshape changes three things:
+Asking a model to "review your own work and loop until it's right" mostly gets the model agreeing with itself. Shipshape changes three things:
 
 1. **Checks actually run.** Tests are written first, from the spec, and every requirement needs a check that runs. If it can't be checked it's UNVERIFIED, never PASS.
 2. **Someone else grades it.** The review runs on another model family when one is available (Gemini, OpenAI Codex, GitHub Copilot, a local Ollama model). A PASS needs quoted evidence.
