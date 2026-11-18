@@ -1,0 +1,13 @@
+{
+  "name": "shipshape",
+  "description": "Spec-driven build loop for Claude Code with real checks and a cross-model review.",
+  "owner": { "name": "PolymathMarsh" },
+  "plugins": [
+    {
+      "name": "shipshape",
+      "source": "./plugins/shipshape",
+      "description": "Spec, tests first, build, verify, and a review by another model (Gemini, Codex, Copilot, Ollama) or a fresh Claude agent. Modes: full, quick, redline.",
+      "version": "0.1.0"
+    }
+  ]
+}
