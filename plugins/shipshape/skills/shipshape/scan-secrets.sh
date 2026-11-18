@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scan-secrets.sh <file> [file...]
 # Blocks review prompts that look like they contain secrets.
-# Prints only file names, line numbers and the kind of match, never the matched text.
+# Prints only quoted file names, line numbers and the kind of match, never the matched text.
 # Exit 0 = all clean, 1 = possible secret found,
 #      2 = usage error (nothing scanned) or scan error (stopped; no findings printed; do not send).
 # Portable: bash + POSIX tools (tr, cut) + grep -E/-a (GNU or BSD).
@@ -12,9 +12,13 @@ say() { printf '%s\n' "$*"; }   # printf, not echo: no backslash interpretation 
 [ "$#" -gt 0 ] || { say "usage: scan-secrets.sh <file> [file...]" >&2; exit 2; }
 # Display form of a file name: control characters (newlines etc.) removed so a name can't fake a line.
 show() { printf '%s' "$1" | tr -d '\000-\037\177'; }
+# Quoted display form: wrapped in single quotes, any ' inside written as '\'' (shell style),
+# so a name can never pass for part of a finding line.
+sq="'"; sq_esc="'\\''"
+qname() { local n; n=$(show "$1"); n=${n//$sq/$sq_esc}; printf "'%s'" "$n"; }
 # Fail closed: check every argument before scanning any of them.
 for f in "$@"; do
-  { [ -f "$f" ] && [ -r "$f" ]; } || { say "scan-secrets: not a readable file: $(show "$f")" >&2; exit 2; }
+  { [ -f "$f" ] && [ -r "$f" ]; } || { say "scan-secrets: not a readable file: $(qname "$f")" >&2; exit 2; }
 done
 
 # name|pattern   (all matched case-insensitively)
@@ -54,12 +58,12 @@ for f in "$@"; do
     # 0 = match, 1 = no match, anything else = error. Fail closed on errors.
     if [ "$rc" -gt 1 ]; then
       if [ "$rc" -eq 199 ]; then why="cut/tr failed"; else why="grep failed (exit $rc)"; fi
-      say "scan-secrets: could not scan $(show "$f"): $why - do not send." >&2
+      say "scan-secrets: could not scan $(qname "$f"): $why - do not send." >&2
       exit 2
     fi
     if [ "$rc" -eq 0 ]; then
       hit=1
-      findings="$findings$(show "$f"): possible $name on line(s): $lines
+      findings="$findings$(qname "$f"): possible $name on line(s): $lines
 "
     fi
   done <<EOF

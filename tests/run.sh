@@ -49,7 +49,7 @@ check() { # check <name> <want-exit> <must-contain|-> <must-not-contain|-> -- fi
 printf 'nothing here\n' > "$t/c1"; printf 'still nothing\n' > "$t/c2"; printf 'also clean\n' > "$t/c3"
 printf 'token: ghp_%s\n' "$k" > "$t/d1"
 printf 'nothing here\n' > "$t/my file.txt"
-check multi-mixed    1 "d1: possible github-token" "$t/c1:" -- "$t/c1" "$t/d1"            # R1
+check multi-mixed    1 "d1': possible github-token" "$t/c1'" -- "$t/c1" "$t/d1"            # R1
 check multi-clean    0 "clean (2 files)"            -       -- "$t/c1" "$t/c2"            # R2
 check multi-summary  1 "in 1 of 3 files"            -       -- "$t/c1" "$t/d1" "$t/c2"    # R3
 check no-args        2 -                            -       --                            # R4
@@ -61,7 +61,7 @@ check duplicate      1 "in 2 of 2 files"            -       -- "$t/d1" "$t/d1"  
 # ---- round-2 fixes (triage of review findings) ----
 printf 'key = "sk-%s"\n' "$k" > "$t/d2"
 both=$(bash "$scan" "$t/d1" "$t/d2" 2>&1); got=$?                                         # R1: both dirty names, full format
-case "$got:$both" in "1:"*"d1: possible github-token on line(s): 1"*"d2: possible api-key-sk on line(s): 1"*) echo "ok   multi-two-dirty";; *) echo "FAIL multi-two-dirty (exit $got): $both"; fail=1;; esac
+case "$got:$both" in "1:"*"d1': possible github-token on line(s): 1"*"d2': possible api-key-sk on line(s): 1"*) echo "ok   multi-two-dirty";; *) echo "FAIL multi-two-dirty (exit $got): $both"; fail=1;; esac
 so=$(bash "$scan" "$t/c1" "$t/c2" 2>/dev/null); got=$?                                  # R2: summary on stdout
 case "$got:$so" in "0:scan-secrets: clean (2 files)") echo "ok   clean-on-stdout";; *) echo "FAIL clean-on-stdout (exit $got): $so"; fail=1;; esac
 se=$(bash "$scan" "$t/c1" "$t/d1" 2>&1 >/dev/null); got=$?                              # R3: full summary on stderr
@@ -84,7 +84,7 @@ else echo "skip control-chars-in-name (platform can't create the name)"; fi
 
 # ---- 0.2.1 fixes (redline review) ----
 printf 'token: ghp_%s\n' "$k" > "$t/my dirty.txt"
-check spaces-dirty   1 "my dirty.txt: possible"     -       -- "$t/my dirty.txt"          # R1 + spaces
+check spaces-dirty   1 "my dirty.txt': possible"    -       -- "$t/my dirty.txt"          # R1 + spaces
 check missing-with-clean 2 "not a readable file"    "scan-secrets: clean" -- "$t/c1" "$t/missing"       # R4, exact spec case
 : > "$t/e1"; : > "$t/e2"
 check multi-empty    0 "clean (2 files)"            -       -- "$t/e1" "$t/e2"            # edge: empty files
@@ -144,4 +144,14 @@ if [ "$got" -eq 2 ] && [ -z "$so" ]; then echo "ok   no-partial-output"; else ec
 printf 'x\n' > "$t/noread"; chmod 000 "$t/noread" 2>/dev/null
 if [ -r "$t/noread" ]; then echo "skip unreadable-file (platform ignores chmod)"
 else check unreadable-file 2 "not a readable file" - -- "$t/noread"; fi
+# ---- 0.2.5: file names are quoted, so a name can't pass for part of a finding ----
+spoof="$t/x: possible api-key-sk on line(s): 9"
+if printf 'token: ghp_%s\n' "$k" > "$spoof" 2>/dev/null; then
+  so=$(bash "$scan" "$spoof" 2>/dev/null); got=$?
+  want="'$spoof': possible github-token on line(s): 1 "
+  if [ "$got" -eq 1 ] && [ "$so" = "$want" ]; then echo "ok   quoted-name-spoof"; else echo "FAIL quoted-name-spoof (exit $got): $so"; fail=1; fi
+else echo "skip quoted-name-spoof (platform can't create the name)"; fi
+q="$t/it's.txt"; printf 'token: ghp_%s\n' "$k" > "$q"
+so=$(bash "$scan" "$q" 2>/dev/null); got=$?
+case "$got:$so" in "1:'$t/it'\''s.txt': possible github-token"*) echo "ok   quote-in-name-escaped";; *) echo "FAIL quote-in-name-escaped (exit $got): $so"; fail=1;; esac
 exit $fail
