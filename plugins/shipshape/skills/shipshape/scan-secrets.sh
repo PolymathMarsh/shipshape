@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# scan-secrets.sh <file>
-# Blocks a review prompt that looks like it contains secrets.
-# Prints only line numbers and the kind of match, never the matched text.
-# Exit 0 = clean, 1 = possible secret found, 2 = usage error.
+# scan-secrets.sh <file> [file...]
+# Blocks review prompts that look like they contain secrets.
+# Prints only file names, line numbers and the kind of match, never the matched text.
+# Exit 0 = all clean, 1 = possible secret found, 2 = usage error (nothing is scanned).
 # Portable: bash + grep -E (GNU or BSD). No sed.
 set -u
-f="${1:-}"
-{ [ -n "$f" ] && [ -f "$f" ]; } || { echo "usage: scan-secrets.sh <file>" >&2; exit 2; }
+[ "$#" -gt 0 ] || { echo "usage: scan-secrets.sh <file> [file...]" >&2; exit 2; }
+# Fail closed: check every argument before scanning any of them.
+for f in "$@"; do
+  { [ -f "$f" ] && [ -r "$f" ]; } || { echo "scan-secrets: not a readable file: $f" >&2; exit 2; }
+done
 
 # name|pattern   (all matched case-insensitively)
 rules='
@@ -25,21 +28,26 @@ connection-string|(password|pwd)=[^;"'"'"' ]{4,}
 assignment|(password|passwd|secret|api_?key|apikey|access_?token|auth_?token|client_?secret)["'"'"' ]*[:=][ ]*["'"'"'][^"'"'"']{6,}["'"'"']
 '
 
-hits=0
-while IFS='|' read -r name pat; do
-  [ -z "$name" ] && continue
-  lines=$(grep -nEi -- "$pat" "$f" 2>/dev/null | cut -d: -f1 | tr '\n' ' ') || true
-  if [ -n "$lines" ]; then
-    hits=1
-    echo "possible $name on line(s): $lines"
-  fi
-done <<EOF
+total=0 dirty=0
+for f in "$@"; do
+  total=$((total + 1))
+  hit=0
+  while IFS='|' read -r name pat; do
+    [ -z "$name" ] && continue
+    lines=$(grep -nEi -- "$pat" "$f" 2>/dev/null | cut -d: -f1 | tr '\n' ' ') || true
+    if [ -n "$lines" ]; then
+      hit=1
+      echo "$f: possible $name on line(s): $lines"
+    fi
+  done <<EOF
 $rules
 EOF
+  [ "$hit" -eq 1 ] && dirty=$((dirty + 1))
+done
 
-if [ "$hits" -eq 1 ]; then
-  echo "scan-secrets: POSSIBLE SECRETS FOUND in $f - do not send." >&2
+if [ "$dirty" -gt 0 ]; then
+  echo "scan-secrets: POSSIBLE SECRETS FOUND in $dirty of $total files - do not send." >&2
   exit 1
 fi
-echo "scan-secrets: clean"
+echo "scan-secrets: clean ($total files)"
 exit 0
