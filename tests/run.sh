@@ -35,4 +35,26 @@ printf 'k = "sk-%s"
 ' "$k" > "$t/leak"; out=$(bash "$scan" "$t/leak" 2>&1)
 case "$out" in *"$k"*) echo "FAIL leak (secret printed)"; fail=1;; *) echo "ok   no-leak";; esac
 rm -f "$t/missing"; bash "$scan" "$t/missing" >/dev/null 2>&1; [ $? -eq 2 ] || { echo "FAIL missing-file"; fail=1; }
+
+# ---- multiple files (spec: specs/scan-secrets-multi.md) ----
+check() { # check <name> <want-exit> <must-contain|-> <must-not-contain|-> -- files...
+  name=$1 want=$2 has=$3 hasnt=$4; shift 5
+  out=$(bash "$scan" "$@" 2>&1); got=$?
+  ok=1
+  [ "$got" -eq "$want" ] || ok=0
+  [ "$has" = "-" ] || case "$out" in *"$has"*) ;; *) ok=0;; esac
+  [ "$hasnt" = "-" ] || case "$out" in *"$hasnt"*) ok=0;; esac
+  if [ "$ok" -eq 1 ]; then echo "ok   $name"; else echo "FAIL $name (exit $got): $out"; fail=1; fi
+}
+printf 'nothing here\n' > "$t/c1"; printf 'still nothing\n' > "$t/c2"; printf 'also clean\n' > "$t/c3"
+printf 'token: ghp_%s\n' "$k" > "$t/d1"
+printf 'nothing here\n' > "$t/my file.txt"
+check multi-mixed    1 "d1: possible github-token" "c1:" -- "$t/c1" "$t/d1"            # R1
+check multi-clean    0 "clean (2 files)"            -       -- "$t/c1" "$t/c2"            # R2
+check multi-summary  1 "in 1 of 3 files"            -       -- "$t/c1" "$t/d1" "$t/c2"    # R3
+check no-args        2 -                            -       --                            # R4
+check missing-in-set 2 -                            "possible" -- "$t/d1" "$t/missing"    # R4: fails before scanning
+check multi-no-leak  1 -                            "$k"    -- "$t/c1" "$t/d1"            # R5
+check spaces         0 "clean (1 files)"            -       -- "$t/my file.txt"           # edge: spaces
+check duplicate      1 "in 2 of 2 files"            -       -- "$t/d1" "$t/d1"            # edge: counted twice
 exit $fail
