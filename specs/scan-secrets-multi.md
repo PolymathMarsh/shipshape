@@ -14,7 +14,7 @@
   **Check:** tests: no args → exit 2; one clean file plus one missing path → exit 2.
 - **R5 No leaks.** Matched text is never printed, with single or multiple files.
   **Check:** the existing no-leak test, plus a two-file version.
-- **R6 Backward compatible.** The single-file exit codes don't change, and all 15 existing tests pass with identical inputs and expectations. Fixture strings may be split in the source so the repo holds no literal fake secrets. *(Wording changed 18 Nov 2026 with the owner's approval; the original said "unchanged". The 4 split fixtures were shown to be byte-identical by SHA-256.)*
+- **R6 Backward compatible.** The single-file exit codes don't change, and all 15 existing tests pass with identical inputs and expectations. Fixture strings may be split in the source so the repo holds no literal fake secrets. *(Wording changed 18 Nov 2026 with the owner's approval; the original said "unchanged". The 4 fixtures split in 0.2.2 (connstr, aws-secret, url-creds, pgp) were shown to be byte-identical by SHA-256. The 5th split fixture, privkey, was split earlier, in commit 84a6c5a, before this feature began.)*
   **Check:** `bash tests/run.sh` shows the original 15 `ok` lines, plus the new tests.
 - **R7 Portable.** Bash plus POSIX tools (`tr`, `cut`) and `grep -E`/`-a` (both GNU and BSD grep): no sed, no other GNU-only flags. *(Wording changed 18 Nov 2026 with the owner's approval; the original "bash + grep -E only" was stricter than intended.)*
   **Check:** `grep -nE '\bsed\b|grep -P' scan-secrets.sh` → no hits. The Linux/macOS/Windows CI run after merge is outside the loop, so locally this is UNVERIFIED and gets confirmed after the push.

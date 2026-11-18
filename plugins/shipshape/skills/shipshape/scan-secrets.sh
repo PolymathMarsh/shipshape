@@ -3,7 +3,7 @@
 # Blocks review prompts that look like they contain secrets.
 # Prints only file names, line numbers and the kind of match, never the matched text.
 # Exit 0 = all clean, 1 = possible secret found,
-#      2 = usage error (nothing scanned) or scan error (stopped; do not send).
+#      2 = usage error (nothing scanned) or scan error (stopped; no findings printed; do not send).
 # Portable: bash + POSIX tools (tr, cut) + grep -E/-a (GNU or BSD).
 { set +x; } 2>/dev/null   # never trace: traces could show matched text
 set -u
@@ -35,6 +35,7 @@ assignment|(password|passwd|secret|api_?key|apikey|access_?token|auth_?token|cli
 '
 
 total=0 dirty=0
+findings=''   # held until every file is scanned, so a scan error prints no partial results
 for f in "$@"; do
   total=$((total + 1))
   hit=0
@@ -42,21 +43,24 @@ for f in "$@"; do
     [ -z "$name" ] && continue
     # Matched text goes straight from grep to cut; only line numbers are kept.
     # -a reads binary files as text, so they are scanned and line numbers stay numbers.
-    # The subshell exits with grep's status, or 9 if cut or tr failed.
+    # The subshell exits with grep's status. If grep is fine (0/1) but cut or tr failed,
+    # it exits 199, a code grep never uses (grep: 0/1/2, signals 128+n with n <= 64).
     lines=$(grep -naEi -- "$pat" "$f" 2>/dev/null | cut -d: -f1 | tr '\n' ' '
             p=("${PIPESTATUS[@]}")
-            { [ "${p[1]}" -eq 0 ] && [ "${p[2]}" -eq 0 ]; } || exit 9
+            [ "${p[0]}" -gt 1 ] && exit "${p[0]}"
+            { [ "${p[1]}" -eq 0 ] && [ "${p[2]}" -eq 0 ]; } || exit 199
             exit "${p[0]}")
     rc=$?
     # 0 = match, 1 = no match, anything else = error. Fail closed on errors.
     if [ "$rc" -gt 1 ]; then
-      if [ "$rc" -eq 9 ]; then why="cut/tr failed"; else why="grep failed (exit $rc)"; fi
+      if [ "$rc" -eq 199 ]; then why="cut/tr failed"; else why="grep failed (exit $rc)"; fi
       say "scan-secrets: could not scan $(show "$f"): $why - do not send." >&2
       exit 2
     fi
     if [ "$rc" -eq 0 ]; then
       hit=1
-      say "$(show "$f"): possible $name on line(s): $lines"
+      findings="$findings$(show "$f"): possible $name on line(s): $lines
+"
     fi
   done <<EOF
 $rules
@@ -64,6 +68,7 @@ EOF
   [ "$hit" -eq 1 ] && dirty=$((dirty + 1))
 done
 
+printf '%s' "$findings"
 if [ "$dirty" -gt 0 ]; then
   say "scan-secrets: POSSIBLE SECRETS FOUND in $dirty of $total files - do not send." >&2
   exit 1

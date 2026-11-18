@@ -34,7 +34,7 @@ expect 0 url-no-creds "see https://example.com/docs and git@github.com:o/r.git
 printf 'k = "sk-%s"
 ' "$k" > "$t/leak"; out=$(bash "$scan" "$t/leak" 2>&1)
 case "$out" in *"$k"*) echo "FAIL leak (secret printed)"; fail=1;; *) echo "ok   no-leak";; esac
-rm -f "$t/missing"; bash "$scan" "$t/missing" >/dev/null 2>&1; [ $? -eq 2 ] || { echo "FAIL missing-file"; fail=1; }
+rm -f "$t/missing"; bash "$scan" "$t/missing" >/dev/null 2>&1; if [ $? -eq 2 ]; then echo "ok   missing-file"; else echo "FAIL missing-file"; fail=1; fi
 
 # ---- multiple files (spec: specs/scan-secrets-multi.md) ----
 check() { # check <name> <want-exit> <must-contain|-> <must-not-contain|-> -- files...
@@ -49,7 +49,7 @@ check() { # check <name> <want-exit> <must-contain|-> <must-not-contain|-> -- fi
 printf 'nothing here\n' > "$t/c1"; printf 'still nothing\n' > "$t/c2"; printf 'also clean\n' > "$t/c3"
 printf 'token: ghp_%s\n' "$k" > "$t/d1"
 printf 'nothing here\n' > "$t/my file.txt"
-check multi-mixed    1 "d1: possible github-token" "c1:" -- "$t/c1" "$t/d1"            # R1
+check multi-mixed    1 "d1: possible github-token" "$t/c1:" -- "$t/c1" "$t/d1"            # R1
 check multi-clean    0 "clean (2 files)"            -       -- "$t/c1" "$t/c2"            # R2
 check multi-summary  1 "in 1 of 3 files"            -       -- "$t/c1" "$t/d1" "$t/c2"    # R3
 check no-args        2 -                            -       --                            # R4
@@ -85,7 +85,7 @@ else echo "skip control-chars-in-name (platform can't create the name)"; fi
 # ---- 0.2.1 fixes (redline review) ----
 printf 'token: ghp_%s\n' "$k" > "$t/my dirty.txt"
 check spaces-dirty   1 "my dirty.txt: possible"     -       -- "$t/my dirty.txt"          # R1 + spaces
-check missing-with-clean 2 "not a readable file"    "clean" -- "$t/c1" "$t/missing"       # R4, exact spec case
+check missing-with-clean 2 "not a readable file"    "scan-secrets: clean" -- "$t/c1" "$t/missing"       # R4, exact spec case
 : > "$t/e1"; : > "$t/e2"
 check multi-empty    0 "clean (2 files)"            -       -- "$t/e1" "$t/e2"            # edge: empty files
 # binary file (NUL byte) with a secret: still flagged, line numbers stay numbers
@@ -117,7 +117,29 @@ if printf 'token: ghp_%s\n' "$k" > "$bs_name" 2>/dev/null; then
 scan-secrets: clean"*) echo "FAIL xpg-echo-name"; fail=1;; "1:"*"possible github-token"*) echo "ok   xpg-echo-name";; *) echo "FAIL xpg-echo-name (exit $got)"; fail=1;; esac
 else echo "skip xpg-echo-name (platform can't create the name)"; fi
 # the repo's own test file and scanner must pass the gate (no literal fixtures left)
-check repo-self-clean 0 "clean (2 files)" - -- "$here/run.sh" "$scan"
+# every file in the repo (tracked files via git when available, else everything outside .git)
+root="$here/.."
+if git -C "$root" rev-parse >/dev/null 2>&1; then
+  files=(); while IFS= read -r x; do files+=("$root/$x"); done < <(git -C "$root" ls-files)
+else
+  files=(); while IFS= read -r x; do files+=("$x"); done < <(find "$root" -type f -not -path '*/.git/*')
+fi
+check repo-self-clean 0 "scan-secrets: clean (${#files[@]} files)" - -- "${files[@]}"
+
+# ---- 0.2.4 fixes (fourth redline review) ----
+# a grep error is reported as a grep error even when cut also fails
+gc=$(PATH="$t/bin:$t/bin2:$PATH" bash "$scan" "$t/c1" 2>&1); got=$?
+case "$got:$gc" in "2:"*"grep failed (exit 2)"*) echo "ok   grep-error-wins";; *) echo "FAIL grep-error-wins (exit $got): $gc"; fail=1;; esac
+# a scan error mid-run prints no findings from earlier files, only the error
+real_grep=$(command -v grep)
+mkdir -p "$t/bin3"; printf '#!/usr/bin/env bash
+case "${@: -1}" in *boom*) exit 2;; esac
+exec "%s" "$@"
+' "$real_grep" > "$t/bin3/grep"; chmod +x "$t/bin3/grep"
+printf 'x
+' > "$t/boom"
+so=$(PATH="$t/bin3:$PATH" bash "$scan" "$t/d1" "$t/boom" 2>/dev/null); got=$?
+if [ "$got" -eq 2 ] && [ -z "$so" ]; then echo "ok   no-partial-output"; else echo "FAIL no-partial-output (exit $got): $so"; fail=1; fi
 # unreadable file (skipped where chmod can't remove read access: Windows, root)
 printf 'x\n' > "$t/noread"; chmod 000 "$t/noread" 2>/dev/null
 if [ -r "$t/noread" ]; then echo "skip unreadable-file (platform ignores chmod)"
