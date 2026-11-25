@@ -16,7 +16,8 @@ The review runs on a different model family when one is available. The plugin ha
 | `.claude-plugin/marketplace.json` | Marketplace entry (name `shipshape`, holds the version) |
 | `plugins/shipshape/.claude-plugin/plugin.json` | Plugin manifest (also holds the version; keep the two in sync) |
 | `plugins/shipshape/skills/shipshape/SKILL.md` | The loop, 10 steps: setup → reviewer choice and consent → spec → tests → build → verify → review (secrets gate) → triage → risk floor → cap → report |
-| `plugins/shipshape/skills/shipshape/reviewers.md` | The exact command for each reviewer CLI (agy, gemini, codex, copilot, ollama, Claude subagent) |
+| `plugins/shipshape/skills/shipshape/reviewers.md` | The exact command for each reviewer (gemini-api, gemini, codex, copilot, ollama, Claude subagent) |
+| `plugins/shipshape/skills/shipshape/gemini-api.py` | The `gemini-api` reviewer: stdlib Python, Gemini REST API with `GEMINI_API_KEY` (header only, no redirects, retries share one time budget; each socket read has its own timeout). Mirrors the maintainer's own tested copy; keep the two in step |
 | `plugins/shipshape/skills/shipshape/scan-secrets.sh` | The secrets gate, run on every prompt before any external send; prints file, line number and kind, never the matched text |
 | `tests/run.sh` | Scanner tests, about 45 checks; the `repo-self-clean` check scans the whole repo |
 | `specs/scan-secrets-multi.md` | The spec for the multi-file scanner, with owner-approved amendments that are dated inline |
@@ -25,7 +26,7 @@ The review runs on a different model family when one is available. The plugin ha
 
 ## Key decisions
 - **Repo name is lowercase `shipshape`; prose says Shipshape.**
-- **Reviewer order:** agy → gemini → codex → copilot → ollama → Claude subagent. Only **agy** is tested end to end. Gemini CLI is left "untested" on purpose, because personal-account sign-in was shut off. Don't mark a reviewer tested without a real run.
+- **Reviewer order:** gemini-api → gemini → codex → copilot → ollama → Claude subagent. Only **gemini-api** is tested end to end (25 Nov 2026). **No `agy` since 0.2.7:** Google's Antigravity FAQ says wrapping `agy` inside third-party coding agents (Claude Code named) is not supported on consumer plans, with account suspension as the risk. Gemini CLI is left "untested" on purpose, because personal-account sign-in was shut off. Don't mark a reviewer tested without a real run.
 - **External reviewers need consent.** That comes from any one of: a `shipshape: external-review ok` line in the project's CLAUDE.md, an allow-list in `~/.claude/shipshape.local.md`, or `--external` (which asks once and shows the size).
 - **The secrets gate always runs.** There is no skip flag, and any non-zero exit blocks the send.
   - Exit codes: 0 clean, 1 possible secret, 2 usage or scan error. Exit 2 having two meanings is accepted.
@@ -44,11 +45,11 @@ The review runs on a different model family when one is available. The plugin ha
 ## Redline procedure (reviewing the scanner work)
 1. Diff from the last **reviewed** commit: currently `b29f0d1` (0.2.5). Version 0.2.6 (`764a01a`) has not been reviewed.
 2. Build the prompt in a fresh temp folder: the spec, the diff (excluding the JSON manifests), the full `scan-secrets.sh`, and local test and CI output.
-   - **Keep it under about 28 KB**, because agy takes the prompt as a command-line argument and Windows limits its length.
+   - The `gemini-api` reviewer sends the prompt in the request body, so there is no 28 KB limit (copilot still has one).
 3. Run `scan-secrets.sh` on the prompt file first. It must say clean.
 4. Ask for consent before every external send, even when the reviewer is already set up.
-5. Run agy and a fresh read-only Claude review (Plan agent, strongest model) in parallel.
-   - agy needs `GEMINI_CLI_TRUST_WORKSPACE=true` and a closed stdin (`</dev/null`), or it hangs.
+5. Run the `gemini-api` reviewer and a fresh read-only Claude review (Plan agent, strongest model) in parallel.
+   - Never `agy` (see Key decisions).
    - Reviewers have made up commit SHAs before (Gemini did once), so check any SHA they quote.
 6. Check every finding against the code before acting on it. Then delete the temp folder.
 

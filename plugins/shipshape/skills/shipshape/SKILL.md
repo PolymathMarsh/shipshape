@@ -19,15 +19,21 @@ Add `--external` to allow an external reviewer for this run only (see step 1).
 - If the session has a model-routing or planning skill, load it first and follow it.
 - If `~/.claude/shipshape.local.md` exists, read it. It may set: reviewer order, tool paths, a list
   of folders allowed to use external reviewers, a lower round cap (it can lower the cap of 3,
-  never raise it), the agy model id and the Ollama model. It is the user's private file and never
+  never raise it), the Gemini model id and the Ollama model. It is the user's private file and never
   goes into a repo, and it is never included in a review prompt.
-- Say which reviewer will be used, in one line, before the first review.
+- Say which reviewer will be used, in one line, before the first review. For `gemini-api`, add that
+  it is billed per token on the user's AI Studio key, and that on Google's unpaid tier prompts may be
+  human-reviewed and used to improve Google's products.
 
 ## 1. Choose the reviewer
 Read `reviewers.md` (same folder) for the detection commands and the exact calls.
-1. Use the first **installed** reviewer, in the order from the local config, or by default:
-   `agy` → `gemini` → `codex` → `copilot` → `ollama` → **Claude subagent**.
-2. **Consent for external reviewers** (agy, gemini, codex, copilot send code off the machine).
+1. Use the first **available** reviewer (installed CLI, or for `gemini-api` a key plus Python), in the
+   order from the local config, or by default:
+   `gemini-api` → `gemini` → `codex` → `copilot` → `ollama` → **Claude subagent**.
+   Never use `agy` (Google Antigravity CLI), even if the local config names it: Google's FAQ says
+   wrapping it inside third-party coding agents "is not supported under consumer plans" (see
+   `reviewers.md`). Say so if skipped.
+2. **Consent for external reviewers** (gemini-api, gemini, codex, copilot send code off the machine).
    You need one of these:
    - the project's CLAUDE.md contains `shipshape: external-review ok`
    - the project folder is on the allow-list in `~/.claude/shipshape.local.md`
@@ -99,7 +105,7 @@ Then add the material, each part under its tagged header:
 Inline everything. Some reviewer CLIs can't read files by path in headless mode.
 
 **Size limits:** about 150 KB in total. Reviewers that take the prompt as a command-line argument
-(agy, copilot) are limited to about **28 KB** on Windows. Over that, cut to the spec, the diff and
+(copilot) are limited to about **28 KB** on Windows. Over that, cut to the spec, the diff and
 the check log, and list what was dropped. If it's still too big, use a reviewer that reads stdin.
 
 **Secrets gate (every external send; cannot be skipped or overridden):**

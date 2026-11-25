@@ -1,6 +1,7 @@
 # shipshape reviewers
 
-Detect each one with `command -v <tool>`, or use a path set in `~/.claude/shipshape.local.md`.
+Detect each CLI with `command -v <tool>`, or use a path set in `~/.claude/shipshape.local.md`.
+`gemini-api` is detected differently (see its section).
 `$P` is the prompt file and `$OUT` is the result file, both inside the review's **empty temp folder**.
 `cd` into that folder before every call. Run each call in the background and give it up to 10 minutes.
 
@@ -13,7 +14,7 @@ Detect each one with `command -v <tool>`, or use a path set in `~/.claude/shipsh
 
 | Reviewer | Family | Leaves the machine | Prompt via | Status |
 |---|---|---|---|---|
-| agy (Google Antigravity CLI) | Gemini | yes | argument (≈28 KB max on Windows) | tested |
+| gemini-api (Gemini API, bundled script) | Gemini | yes | request body (no size cap) | tested |
 | gemini (Gemini CLI) | Gemini | yes | stdin | untested |
 | codex (OpenAI Codex CLI) | OpenAI | yes | stdin | untested |
 | copilot (GitHub Copilot CLI) | various | yes | argument (≈28 KB max on Windows) | untested |
@@ -29,13 +30,29 @@ commands (codex, even in its read-only sandbox) can still *read* files elsewhere
 the model decides to. The prompt tells it not to use tools. For sensitive machines, prefer
 `ollama` or the Claude subagent.
 
-## agy
+## gemini-api
+Detect: `GEMINI_API_KEY` is set (test with `[ -n "$GEMINI_API_KEY" ]`; never print it) and a
+working Python 3.8+ is found. On Windows, `python3` can be the Microsoft Store stub that only prints
+"Python was not found", so test each candidate by running it:
 ```
-GEMINI_CLI_TRUST_WORKSPACE=true agy ${AGY_MODEL:+--model "$AGY_MODEL"} --print-timeout 9m -p "$(cat "$P")" </dev/null > "$OUT" 2>"$OUT.err"
+PY=$(for c in python3 python py; do "$c" -c 'import sys; sys.exit(sys.version_info < (3, 8))' 2>/dev/null && { echo "$c"; break; }; done)
 ```
-Set `AGY_MODEL` from the local config's agy model, if one is given; otherwise agy uses its default.
-`agy models </dev/null` lists the ids. Without the env var and the closed stdin, agy hangs with no
-output. It also hangs if it needs an interactive sign-in: tell the user to run `agy` once in a terminal.
+Available when `$PY` is non-empty. The script is `gemini-api.py` in this skill's folder; it is not
+an agent, has no tools, and contacts only the Gemini API (through your HTTPS proxy, if one is set).
+```
+"$PY" -I "<this skill's folder>/gemini-api.py" "${GEMINI_MODEL:-gemini-4-argon-high}" "$P" "$OUT" 9m 2>"$OUT.err"
+```
+Set `GEMINI_MODEL` from the local config's gemini model, if one is given. It prints one status line:
+`SUCCESS …` (exit 0) or `FAILED …` / `NO KEY …` (exit 1: HTTP error, rate limit or spend cap,
+truncated or blocked answer). Treat anything but `SUCCESS` as a failed reviewer and try the next.
+The key is billed per token on the user's AI Studio project. On Google's unpaid tier, prompts may be
+human-reviewed and used to improve Google's products. Both points go in the one-line reviewer
+announcement (SKILL.md step 0), whatever the source of consent.
+
+**Why not `agy` (Google Antigravity CLI):** Google's Antigravity FAQ (checked 25 Nov 2026) says
+"Wrapping `agy` inside third-party coding agents or applications … is not supported under consumer
+plans". The same FAQ names Claude Code in its heading and says using third-party software to access
+Antigravity "can result in suspension or termination of your account". Shipshape never calls `agy`.
 
 ## gemini
 ```

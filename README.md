@@ -16,10 +16,10 @@ Asking a model to "review your own work and loop until it's right" mostly gets t
 3. **It stops.** 3 rounds at most, a checkpoint before each round, and no declaring a pass just to end the loop.
 
 ## Requirements
-- **Claude Code** (CLI, desktop app or IDE extension). Nothing else to install: the plugin is one skill plus a bash script.
+- **Claude Code** (CLI, desktop app or IDE extension). Nothing else to install: the plugin is one skill, a bash script and an optional Python script for the Gemini reviewer.
 - **bash, grep, cut, tr.** These are standard on macOS and Linux. On Windows, Claude Code already uses Git Bash, which includes them. CI tests the scanner on all three.
 - **git** is recommended for checkpoints. Without it, Shipshape keeps dated copies instead.
-- **For a cross-model review:** at least one of the reviewer CLIs below, installed and signed in. Without one, the review runs on a fresh Claude agent and the report says so.
+- **For a cross-model review:** a Google AI Studio key in `GEMINI_API_KEY` plus Python 3 (for the bundled `gemini-api` reviewer), or at least one of the reviewer CLIs below, installed and signed in. Without one, the review runs on a fresh Claude agent and the report says so.
 
 ## Install
 In Claude Code:
@@ -29,11 +29,11 @@ In Claude Code:
 ```
 
 ## Reviewers
-Shipshape uses the first reviewer it finds installed: `agy` → `gemini` → `codex` → `copilot` → `ollama` → a fresh Claude subagent. You can change the order in your local config (below).
+Shipshape uses the first reviewer it finds available: `gemini-api` → `gemini` → `codex` → `copilot` → `ollama` → a fresh Claude subagent. You can change the order in your local config (below).
 
 | Reviewer | Model family | Code leaves your machine | Status |
 |---|---|---|---|
-| [agy](https://antigravity.google/) (Google Antigravity CLI) | Gemini | yes | tested |
+| gemini-api (bundled `gemini-api.py`, needs Python 3 and a [Google AI Studio](https://aistudio.google.com/) key in `GEMINI_API_KEY`) | Gemini | yes | tested |
 | [gemini](https://github.com/google-gemini/gemini-cli) (Gemini CLI) | Gemini | yes | untested |
 | [codex](https://github.com/openai/codex) (OpenAI Codex CLI) | OpenAI | yes | untested |
 | [copilot](https://docs.github.com/en/copilot/how-tos/copilot-cli) (GitHub Copilot CLI) | various | yes | untested |
@@ -42,25 +42,26 @@ Shipshape uses the first reviewer it finds installed: `agy` → `gemini` → `co
 
 "Untested" means the call follows the tool's docs but hasn't been run end to end yet. Reports and fixes are welcome.
 
+**No `agy` (Google Antigravity CLI) since 0.2.7.** Google's [Antigravity FAQ](https://antigravity.google/docs/faq.md) (checked 25 Nov 2026) says wrapping `agy` inside third-party coding agents "is not supported under consumer plans", names Claude Code in its heading, says third-party access "can result in suspension or termination of your account", and recommends an AI Studio API key instead. The `gemini-api` reviewer does exactly that. API calls are billed per token on your AI Studio project; set a spend cap there.
+
 ## What gets sent where (read this)
 - **External reviewers are off until you allow them.** You can allow one of three ways:
   - add `shipshape: external-review ok` to the project's `CLAUDE.md`
   - list the folder in your local config
   - pass `--external` on a run, which asks once and shows the file count and size before sending
-- What's sent: the spec, the diff, the full files the change touches (about 150 KB max) and the check output. Your reviewer's provider handles that data under its own terms. On consumer plans, the provider may use it for training, depending on your account settings.
+- What's sent: the spec, the diff, the full files the change touches (about 150 KB max) and the check output. Your reviewer's provider handles that data under its own terms. On consumer plans, the provider may use it for training, depending on your account settings. On the Gemini API's **unpaid** tier, Google's [terms](https://aistudio.google.com/docs/terms) say human reviewers may read prompts and they are used to improve Google's products; the paid tier doesn't use them for that.
 - **Secrets gate:** before any external send, files like `.env*`, keys and credential files are excluded (from the files and the diff), and `scan-secrets.sh` scans the prompt for key, token and password patterns. Any match **blocks** the send until the material is removed or redacted. It reports line numbers only, never the matched text. There is no flag to skip it.
   - It is a pattern scan, **not a guarantee**. For anything sensitive, use `ollama` or the Claude reviewer.
 - **Reviewers run sandboxed from your project.** Each one runs from an empty temp folder containing only the prompt, and gets no write, shell or auto-approve permissions.
   - **Remaining risk:** these CLIs are agents with built-in tools. A CLI that can run shell commands (Codex, even in its read-only sandbox) could still read files elsewhere on your machine if the model chose to. For sensitive machines, use `ollama` or the Claude reviewer.
 - **Review output is untrusted.** Claude checks each finding before acting on it and never runs commands from it.
-- **The plugin itself** has no hooks, no MCP servers and no network code. The only data that leaves your machine is the reviewer call you allowed.
+- **The plugin itself** has no hooks and no MCP servers. Its only network code is `gemini-api.py`, which runs only when you've allowed external review, talks only to `generativelanguage.googleapis.com` (through your HTTPS proxy, if you set one), and never follows redirects. The only data that leaves your machine is the reviewer call you allowed.
 
 ## Local config (optional, private)
 `~/.claude/shipshape.local.md` is plain notes Claude reads at the start. Keep it out of any repo.
 ```
 reviewer order: codex, ollama, claude
-agy path: C:\Users\you\AppData\Local\agy\bin\agy.exe
-agy model: gemini-x-pro          # leave out to use agy's default
+gemini model: gemini-4-argon-high  # default; any Gemini API id, optional -low/-medium/-high
 ollama model: qwen2.5-coder:14b  # must already be installed
 external review allowed: ~/code/my-public-app, ~/code/side-project
 max rounds: 2                    # can lower the cap of 3, never raise it
